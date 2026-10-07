@@ -1,37 +1,30 @@
 import jwt from 'jsonwebtoken';
-import type { Request, Response, NextFunction } from 'express';
+import type { NextFunction, Request, Response } from 'express';
+
+import { config } from '../config';
 
 declare global {
   namespace Express {
-    // eslint-disable-next-line @typescript-eslint/no-empty-object-type
     interface Request {
       userId?: string;
     }
   }
 }
 
+// Lê o header "Authorization: Bearer <token>", valida o JWT e coloca o id do usuário em req.userId
 export const authMiddleware = (req: Request, res: Response, next: NextFunction) => {
-  const authHeader = req.headers.authorization;
-  const token =
-    typeof authHeader === 'string' && authHeader.startsWith('Bearer ')
-      ? authHeader.slice('Bearer '.length)
-      : null;
+  const header = req.headers.authorization;
+  const token = header?.startsWith('Bearer ') ? header.slice('Bearer '.length) : null;
 
   if (!token) {
     res.status(401).json({ error: 'Não autorizado' });
     return;
   }
 
-  const secret = process.env.JWT_SECRET;
-  if (!secret) {
-    res.status(401).json({ error: 'Não autorizado' });
-    return;
-  }
-
   try {
-    const payload = jwt.verify(token, secret) as { userId?: string };
+    const payload = jwt.verify(token, config.jwtSecret) as { userId?: string };
 
-    if (!payload?.userId) {
+    if (!payload.userId) {
       res.status(401).json({ error: 'Não autorizado' });
       return;
     }
@@ -39,8 +32,6 @@ export const authMiddleware = (req: Request, res: Response, next: NextFunction) 
     req.userId = payload.userId;
     next();
   } catch {
-    res.status(401).json({ error: 'Não autorizado' });
+    res.status(401).json({ error: 'Sessão expirada ou inválida' });
   }
 };
-
-

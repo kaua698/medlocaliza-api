@@ -1,122 +1,61 @@
-// MIDDLEWARES DE VALIDAÇÃO — verificam os campos do body antes de chegar nas rotas
-// Para adicionar novos campos obrigatórios, siga o mesmo padrão de verificação e retorne 400 com { error: "mensagem" }
-export const validateCadastro = (
-  req: any,
-  res: any,
-  next: any,
-): void => {
+import type { NextFunction, Request, Response } from 'express';
+
+// Validações dos bodies. Em caso de erro, respondem 400 com { error } e não chamam a rota.
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const TOTAL_DISTRITOS = 8;
+
+const fail = (res: Response, error: string) => {
+  res.status(400).json({ error });
+};
+
+const isBlank = (value: unknown) => value === undefined || value === null || String(value).trim() === '';
+const isFiniteNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+
+export const validateCadastro = (req: Request, res: Response, next: NextFunction) => {
   const { nome, email, senha } = req.body ?? {};
 
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-  if (!nome || String(nome).trim().length === 0) {
-    res.status(400).json({ error: 'Nome é obrigatório' });
-    return;
-  }
-
-  if (!email || !emailRegex.test(String(email))) {
-    res.status(400).json({ error: 'Email inválido' });
-    return;
-  }
-
-  if (!senha || String(senha).length < 6) {
-    res.status(400).json({ error: 'Senha deve ter no mínimo 6 caracteres' });
-    return;
-  }
+  if (isBlank(nome)) return fail(res, 'Nome é obrigatório');
+  if (String(nome).trim().length > 80) return fail(res, 'Nome muito longo');
+  if (isBlank(email) || !EMAIL_REGEX.test(String(email).trim())) return fail(res, 'Email inválido');
+  if (isBlank(senha) || String(senha).length < 6) return fail(res, 'Senha deve ter no mínimo 6 caracteres');
 
   next();
 };
 
-export const validateLogin = (
-  req: any,
-  res: any,
-  next: any,
-): void => {
+export const validateLogin = (req: Request, res: Response, next: NextFunction) => {
   const { email, senha } = req.body ?? {};
 
-  if (!email || String(email).trim().length === 0) {
-    res.status(400).json({ error: 'Email é obrigatório' });
-    return;
-  }
-
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(String(email))) {
-    res.status(400).json({ error: 'Email inválido' });
-    return;
-  }
-
-  if (!senha || String(senha).trim().length === 0) {
-    res.status(400).json({ error: 'Senha é obrigatória' });
-    return;
-  }
+  if (isBlank(email)) return fail(res, 'Email é obrigatório');
+  if (!EMAIL_REGEX.test(String(email).trim())) return fail(res, 'Email inválido');
+  if (isBlank(senha)) return fail(res, 'Senha é obrigatória');
 
   next();
 };
 
-export const validateBusca = (
-  req: any,
-  res: any,
-  next: any,
-): void => {
-  const {
-    medicamento,
-    latitude,
-    longitude,
-    distritoMaisProximo,
-    quantidadeResultados,
-  } = req.body ?? {};
+export const validateBusca = (req: Request, res: Response, next: NextFunction) => {
+  const { medicamento, latitude, longitude, distritoMaisProximo, quantidadeResultados } = req.body ?? {};
 
-  if (!medicamento || String(medicamento).trim().length === 0) {
-    res.status(400).json({ error: 'medicamento é obrigatório' });
-    return;
+  if (isBlank(medicamento)) return fail(res, 'medicamento é obrigatório');
+  if (String(medicamento).trim().length > 100) return fail(res, 'medicamento muito longo');
+
+  // Localização é opcional: o app envia null quando o usuário não libera a permissão.
+  // Se vier, precisa ser completa e válida.
+  const hasLocation = latitude != null || longitude != null;
+  if (hasLocation) {
+    if (!isFiniteNumber(latitude) || latitude < -90 || latitude > 90) return fail(res, 'latitude inválida');
+    if (!isFiniteNumber(longitude) || longitude < -180 || longitude > 180) return fail(res, 'longitude inválida');
   }
 
-  if (typeof latitude !== 'number' || Number.isNaN(latitude)) {
-    res.status(400).json({ error: 'latitude deve ser um número' });
-    return;
+  if (distritoMaisProximo != null) {
+    if (!Number.isInteger(distritoMaisProximo) || distritoMaisProximo < 1 || distritoMaisProximo > TOTAL_DISTRITOS) {
+      return fail(res, `distritoMaisProximo deve ser um inteiro de 1 a ${TOTAL_DISTRITOS}`);
+    }
   }
 
-  if (latitude < -90 || latitude > 90) {
-    res.status(400).json({ error: 'latitude fora do intervalo válido' });
-    return;
-  }
-
-  if (typeof longitude !== 'number' || Number.isNaN(longitude)) {
-    res.status(400).json({ error: 'longitude deve ser um número' });
-    return;
-  }
-
-  if (longitude < -180 || longitude > 180) {
-    res.status(400).json({ error: 'longitude fora do intervalo válido' });
-    return;
-  }
-
-  if (
-    typeof distritoMaisProximo !== 'number' ||
-    !Number.isInteger(distritoMaisProximo)
-  ) {
-    res.status(400).json({ error: 'distritoMaisProximo deve ser um inteiro' });
-    return;
-  }
-
-  if (distritoMaisProximo < 1 || distritoMaisProximo > 8) {
-    res.status(400).json({ error: 'distritoMaisProximo fora do intervalo válido' });
-    return;
-  }
-
-  if (typeof quantidadeResultados !== 'number' || Number.isNaN(quantidadeResultados)) {
-    res.status(400).json({ error: 'quantidadeResultados deve ser um número' });
-    return;
-  }
-
-  if (quantidadeResultados < 0) {
-    res.status(400).json({ error: 'quantidadeResultados deve ser >= 0' });
-    return;
+  if (!Number.isInteger(quantidadeResultados) || quantidadeResultados < 0) {
+    return fail(res, 'quantidadeResultados deve ser um inteiro >= 0');
   }
 
   next();
 };
-
-
-
-
